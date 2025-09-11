@@ -73,11 +73,12 @@ let lastPan: Point | null = null;
 // Pointer events
 canvas.addEventListener("pointerdown", (e: PointerEvent) => {
   canvas.setPointerCapture(e.pointerId);
-  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const rect = canvas.getBoundingClientRect();
+  activePointers.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
 
   if (activePointers.size === 1 && e.button === 0) {
     // Start stroke
-    const pos = toWorld(e.clientX, e.clientY);
+    const pos = toWorld(e.clientX - rect.left, e.clientY - rect.top);
     const color = getRandomColor();
     currentStroke = { points: [pos], color, width: 2 };
     // Do not push to strokes yet; wait for server broadcast
@@ -86,12 +87,13 @@ canvas.addEventListener("pointerdown", (e: PointerEvent) => {
 
 canvas.addEventListener("pointermove", (e: PointerEvent) => {
   if (!activePointers.has(e.pointerId)) return;
+  const rect = canvas.getBoundingClientRect();
   const prev = activePointers.get(e.pointerId)!;
-  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  activePointers.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
 
   if (activePointers.size === 1 && currentStroke) {
     // Continue stroke
-    currentStroke.points.push(toWorld(e.clientX, e.clientY));
+    currentStroke.points.push(toWorld(e.clientX - rect.left, e.clientY - rect.top));
   } else if (activePointers.size === 2) {
     // Pinch/zoom gesture
     const pts = Array.from(activePointers.values());
@@ -141,13 +143,14 @@ canvas.addEventListener("pointercancel", (e: PointerEvent) => {
 
 // Wheel zoom (desktop)
 canvas.addEventListener("wheel", (e: WheelEvent) => {
+  const rect = canvas.getBoundingClientRect();
   const zoomIntensity = 0.1;
-  const mouse = toWorld(e.clientX, e.clientY);
+  const mouse = toWorld(e.clientX - rect.left, e.clientY - rect.top);
   const delta = e.deltaY < 0 ? 1 + zoomIntensity : 1 - zoomIntensity;
 
   scale *= delta;
-  offsetX = e.clientX - mouse.x * scale;
-  offsetY = e.clientY - mouse.y * scale;
+  offsetX = e.clientX - rect.left - mouse.x * scale;
+  offsetY = e.clientY - rect.top - mouse.y * scale;
 });
 
 // Draw loop
@@ -157,6 +160,7 @@ function draw() {
 
   ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
 
+  /*
   // Grid
   ctx.strokeStyle = "#ddd";
   ctx.lineWidth = 1 / scale;
@@ -172,6 +176,7 @@ function draw() {
     ctx.lineTo(5000, y);
     ctx.stroke();
   }
+  */
 
   // Strokes from server
   for (const stroke of strokes) {
