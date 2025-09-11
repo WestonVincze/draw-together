@@ -37,7 +37,8 @@ function getRandomColor() {
 }
 
 // WebSocket setup
-const ws = new WebSocket("ws://localhost:8080"); // Change to your server URL
+const wsUrl = import.meta.env.VITE_WS_URL || "ws://localhost:8080";
+const ws = new WebSocket(wsUrl);
 ws.addEventListener("open", () => {
   console.log("WebSocket connected");
 });
