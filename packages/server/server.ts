@@ -28,6 +28,14 @@ wss.on('connection', (ws: WebSocket) => {
         }
       });
     }
+    // Handle partial stroke updates
+    if (data.type === 'stroke-update' && data.stroke) {
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'stroke-update', stroke: data.stroke }));
+        }
+      });
+    }
   });
 });
 

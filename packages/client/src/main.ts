@@ -26,6 +26,11 @@ let offsetY = 0;
 const strokes: Stroke[] = [];
 let currentStroke: Stroke | null = null;
 
+// Track in-progress strokes from other users
+const remoteStrokes = new Map<string, Stroke>();
+let updateInterval: number | null = null;
+let clientId = Math.random().toString(36).slice(2); // Simple client ID
+
 // Helpers
 function toWorld(x: number, y: number): Point {
   return { x: (x - offsetX) / scale, y: (y - offsetY) / scale };
@@ -55,11 +60,16 @@ ws.addEventListener("message", async (event) => {
     const data = JSON.parse(text);
     if (data.type === "stroke" && data.stroke) {
       strokes.push(data.stroke);
-      // Optionally, you could trigger a redraw here if needed
+      // Remove remote in-progress stroke
+      if (data.clientId) remoteStrokes.delete(data.clientId);
+    }
+    if (data.type === "stroke-update" && data.stroke && data.clientId && data.clientId !== clientId) {
+      remoteStrokes.set(data.clientId, data.stroke);
     }
     if (data.type === "history" && Array.isArray(data.strokes)) {
       strokes.length = 0; // Clear any existing strokes
       strokes.push(...data.strokes);
+      remoteStrokes.clear();
     }
   } catch (e) {
     console.error("WebSocket message error", e, event.data);
@@ -80,8 +90,19 @@ canvas.addEventListener("pointerdown", (e: PointerEvent) => {
     // Start stroke
     const pos = toWorld(e.clientX - rect.left, e.clientY - rect.top);
     const color = getRandomColor();
-    currentStroke = { points: [pos], color, width: 2 };
-    // Do not push to strokes yet; wait for server broadcast
+    currentStroke = { points: [pos], color, width: 3 };
+    // Start sending partial updates every 250ms
+    updateInterval = window.setInterval(() => {
+      if (currentStroke) {
+        ws.send(
+          JSON.stringify({
+            type: "stroke-update",
+            stroke: currentStroke,
+            clientId,
+          })
+        );
+      }
+    }, 250);
   }
 });
 
@@ -130,11 +151,15 @@ canvas.addEventListener("pointerup", (e: PointerEvent) => {
   canvas.releasePointerCapture(e.pointerId);
   activePointers.delete(e.pointerId);
   if (currentStroke) {
-    // Send stroke to server
-    ws.send(JSON.stringify({ type: "stroke", stroke: currentStroke }));
+    // Send final stroke to server
+    ws.send(JSON.stringify({ type: "stroke", stroke: currentStroke, clientId }));
   }
   currentStroke = null;
   lastPan = null;
+  if (updateInterval) {
+    clearInterval(updateInterval);
+    updateInterval = null;
+  }
 });
 
 canvas.addEventListener("pointercancel", (e: PointerEvent) => {
@@ -153,55 +178,71 @@ canvas.addEventListener("wheel", (e: WheelEvent) => {
   offsetY = e.clientY - rect.top - mouse.y * scale;
 });
 
-// Draw loop
-function draw() {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Brush switching
+let currentBrush = 1;
+window.addEventListener('keydown', (e) => {
+  if (e.key === '1') currentBrush = 1;
+  if (e.key === '2') currentBrush = 2;
+});
 
-  ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
-
-  /*
-  // Grid
-  ctx.strokeStyle = "#ddd";
-  ctx.lineWidth = 1 / scale;
-  for (let x = -5000; x < 5000; x += 50) {
-    ctx.beginPath();
-    ctx.moveTo(x, -5000);
-    ctx.lineTo(x, 5000);
-    ctx.stroke();
-  }
-  for (let y = -5000; y < 5000; y += 50) {
-    ctx.beginPath();
-    ctx.moveTo(-5000, y);
-    ctx.lineTo(5000, y);
-    ctx.stroke();
-  }
-  */
-
-  // Strokes from server
-  for (const stroke of strokes) {
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.width; // Preserve thickness when zooming
+// Draw stroke with brush effect
+function drawStroke(stroke: Stroke, alpha = 0.85) {
+  ctx.strokeStyle = stroke.color;
+  ctx.lineWidth = stroke.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = alpha;
+  if (currentBrush === 1) {
     ctx.beginPath();
     stroke.points.forEach((p, i) => {
       if (i === 0) ctx.moveTo(p.x, p.y);
       else ctx.lineTo(p.x, p.y);
     });
     ctx.stroke();
+  } else if (currentBrush === 2) {
+    // Realistic brush: simulate bristles
+    const bristleCount = 8;
+    const spread = stroke.width * 0.6;
+    for (let b = 0; b < bristleCount; b++) {
+      const angle = (2 * Math.PI * b) / bristleCount;
+      const dx = Math.cos(angle) * spread;
+      const dy = Math.sin(angle) * spread;
+      ctx.beginPath();
+      stroke.points.forEach((p, i) => {
+        const px = p.x + dx * Math.random();
+        const py = p.y + dy * Math.random();
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1.0;
+}
+
+// Draw loop
+function draw() {
+  console.log('drawing')
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+
+  // Strokes from server
+  for (const stroke of strokes) {
+    drawStroke(stroke);
   }
 
   // Optimistically show current stroke
   if (currentStroke) {
-    ctx.strokeStyle = currentStroke.color;
-    ctx.lineWidth = currentStroke.width; // Preserve thickness when zooming
-    ctx.beginPath();
-    currentStroke.points.forEach((p, i) => {
-      if (i === 0) ctx.moveTo(p.x, p.y);
-      else ctx.lineTo(p.x, p.y);
-    });
-    ctx.stroke();
+    drawStroke(currentStroke);
   }
 
+  // Show in-progress remote strokes
+  for (const stroke of remoteStrokes.values()) {
+    drawStroke(stroke, 0.5);
+  }
   requestAnimationFrame(draw);
 }
+
 draw();
