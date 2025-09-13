@@ -9,31 +9,12 @@ type Stroke = {
   width: number;
 };
 
-// Ensure canvas fills viewport and prevent scrolling
-const setCanvasFullscreen = () => {
-  canvas.style.position = 'fixed';
-  canvas.style.top = '0';
-  canvas.style.left = '0';
-  canvas.style.width = '100vw';
-  canvas.style.height = '100vh';
-  document.body.style.overflow = 'hidden';
-  document.documentElement.style.overflow = 'hidden';
-};
-setCanvasFullscreen();
-window.addEventListener('resize', setCanvasFullscreen);
-window.addEventListener('orientationchange', setCanvasFullscreen);
-
 // Resize canvas
 function resizeCanvas() {
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = window.innerWidth * dpr;
-  canvas.height = window.innerHeight * dpr;
-  canvas.style.width = window.innerWidth + 'px';
-  canvas.style.height = window.innerHeight + 'px';
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
 window.addEventListener("resize", resizeCanvas);
-window.addEventListener("orientationchange", resizeCanvas);
 resizeCanvas();
 
 // Viewport state
