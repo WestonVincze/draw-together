@@ -220,13 +220,47 @@ function drawStroke(stroke: Stroke, alpha = 0.85) {
   ctx.globalAlpha = 1.0;
 }
 
+// Add fullscreen button
+const fullscreenBtn = document.createElement('button');
+fullscreenBtn.textContent = '⛶';
+fullscreenBtn.id = 'fullscreen-btn';
+fullscreenBtn.title = 'Fullscreen';
+fullscreenBtn.style.position = 'absolute';
+fullscreenBtn.style.top = '16px';
+fullscreenBtn.style.right = '16px';
+fullscreenBtn.style.zIndex = '1000';
+fullscreenBtn.style.padding = '8px 12px';
+fullscreenBtn.style.fontSize = '20px';
+fullscreenBtn.style.borderRadius = '6px';
+fullscreenBtn.style.border = 'none';
+fullscreenBtn.style.background = 'rgba(255,255,255,0.8)';
+fullscreenBtn.style.cursor = 'pointer';
+fullscreenBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+fullscreenBtn.style.transition = 'background 0.2s';
+fullscreenBtn.onmouseenter = () => fullscreenBtn.style.background = 'rgba(255,255,255,1)';
+fullscreenBtn.onmouseleave = () => fullscreenBtn.style.background = 'rgba(255,255,255,0.8)';
+document.body.appendChild(fullscreenBtn);
+
+fullscreenBtn.onclick = () => {
+  const elem = document.documentElement;
+  if (!document.fullscreenElement) {
+    elem.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+};
+
 // Draw loop
 function draw() {
-  console.log('drawing')
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   ctx.setTransform(scale, 0, 0, scale, offsetX, offsetY);
+
+  // Hide fullscreen button while drawing
+  if (fullscreenBtn) {
+    fullscreenBtn.style.display = currentStroke ? 'none' : 'block';
+  }
 
   // Strokes from server
   for (const stroke of strokes) {
@@ -242,7 +276,9 @@ function draw() {
   for (const stroke of remoteStrokes.values()) {
     drawStroke(stroke, 0.5);
   }
+
   requestAnimationFrame(draw);
 }
 
 draw();
+
